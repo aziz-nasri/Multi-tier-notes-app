@@ -18,3 +18,19 @@ aws ec2 attach-internet-gateway --internet-gateway-id $IGW_ID --vpc-id $VPC_ID
 PUB_RT=$(aws ec2 create-route-table --vpc-id $VPC_ID --query RouteTable.RouteTableId --output text)
 aws ec2 create-route --route-table-id $PUB_RT --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
 for s in $PUB_A $PUB_B; do aws ec2 associate-route-table --route-table-id $PUB_RT --subnet-id $s; done
+
+# NAT + app route table
+EIP=$(aws ec2 allocate-address --domain vpc --query AllocationId --output text)
+NAT_ID=$(aws ec2 create-nat-gateway --subnet-id $PUB_A --allocation-id $EIP --query NatGateway.NatGatewayId --output text)
+aws ec2 wait nat-gateway-available --nat-gateway-ids $NAT_ID
+APP_RT=$(aws ec2 create-route-table --vpc-id $VPC_ID --query RouteTable.RouteTableId --output text)
+aws ec2 create-route --route-table-id $APP_RT --destination-cidr-block 0.0.0.0/0 --nat-gateway-id $NAT_ID
+for s in $APP_A $APP_B; do aws ec2 associate-route-table --route-table-id $APP_RT --subnet-id $s; done
+
+# Data route table
+DATA_RT=$(aws ec2 create-route-table --vpc-id $VPC_ID --query RouteTable.RouteTableId --output text)
+for s in $DATA_A $DATA_B; do aws ec2 associate-route-table --route-table-id $DATA_RT --subnet-id $s; done
+
+# S3 gateway endpoint
+aws ec2 create-vpc-endpoint --vpc-id $VPC_ID --service-name com.amazonaws.$AWS_REGION.s3 \
+  --route-table-ids $APP_RT
