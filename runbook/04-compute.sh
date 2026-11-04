@@ -19,13 +19,14 @@ python3 -m venv venv
 
 DB_HOST=\$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].Endpoint.Address' --output text --region $AWS_REGION)
 DB_SECRET_ARN=\$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text --region $AWS_REGION)
+EOF
 
-cat << 'ENVEOF' > /opt/notes/.env
+cat << 'ENV' > /opt/notes/.env
 AWS_REGION=$AWS_REGION
 DB_HOST=\$DB_HOST
 DB_SECRET_ARN=\$DB_SECRET_ARN
 PORT=3000
-ENVEOF
+ENV
 
 cat > /etc/systemd/system/notes.service << 'UNIT'
 [Unit]
@@ -44,3 +45,29 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload && systemctl enable --now notes
+
+# Launch template (IMDSv2 enforced, encrypted EBS)
+cat > lt.json <<EOF
+{"ImageId":"resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64",
+ "InstanceType":"t4g.micro",
+ "IamInstanceProfile":{"Name":"notes-ec2-profile"},
+ "SecurityGroupIds":["$APP_SG"],
+ "MetadataOptions":{"HttpTokens":"required","HttpPutResponseHopLimit":1},
+ "BlockDeviceMappings":[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":8,"VolumeType":"gp3","Encrypted":true,"DeleteOnTermination":true}}],
+ "TagSpecifications":[{"ResourceType":"instance","Tags":[{"Key":"Project","Value":"$PROJ"}]}],
+ "UserData":"$(base64 -w0 userdata.sh)"}
+EOF
+aws ec2 create-launch-template --launch-template-name notes-lt --launch-template-data file://lt.json
+
+# Target group + ASG
+TG_ARN=$(aws elbv2 create-target-group --name notes-tg --protocol HTTP --port 3000 --vpc-id $VPC_ID \
+  --target-type instance --health-check-path /api/health --health-check-interval-seconds 15 \
+  --healthy-threshold-count 2 --query 'TargetGroups[0].TargetGroupArn' --output text)
+aws autoscaling create-auto-scaling-group --auto-scaling-group-name notes-asg \
+  --launch-template LaunchTemplateName=notes-lt,Version='$Latest' \
+  --min-size 2 --max-size 4 --desired-capacity 2 --vpc-zone-identifier "$APP_A,$APP_B" \
+  --target-group-arns $TG_ARN --health-check-type ELB --health-check-grace-period 180 \
+  --tags Key=Project,Value=$PROJ,PropagateAtLaunch=true
+aws autoscaling put-scaling-policy --auto-scaling-group-name notes-asg --policy-name cpu50 \
+  --policy-type TargetTrackingScaling --target-tracking-configuration \
+  '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"},"TargetValue":50.0}'
