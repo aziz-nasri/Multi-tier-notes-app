@@ -31,3 +31,12 @@ aws rds wait db-instance-available --db-instance-identifier notes-db
 
 DB_HOST=$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].Endpoint.Address' --output text)
 DB_SECRET_ARN=$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text)
+
+# adding least-privilege policy to ec2
+cat > ec2-policy.json <<EOF
+{"Version":"2012-10-17","Statement":[
+ {"Effect":"Allow","Action":"secretsmanager:GetSecretValue","Resource":"$DB_SECRET_ARN"},
+ {"Effect":"Allow","Action":"kms:Decrypt","Resource":"arn:aws:kms:$AWS_REGION:$ACCOUNT_ID:key/$KMS_KEY"},
+ {"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::$ART_BUCKET/*"}]}
+EOF
+aws iam put-role-policy --role-name notes-ec2-role --policy-name notes-app-access --policy-document file://ec2-policy.json
