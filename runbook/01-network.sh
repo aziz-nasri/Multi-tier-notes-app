@@ -34,3 +34,8 @@ for s in $DATA_A $DATA_B; do aws ec2 associate-route-table --route-table-id $DAT
 # S3 gateway endpoint
 aws ec2 create-vpc-endpoint --vpc-id $VPC_ID --service-name com.amazonaws.$AWS_REGION.s3 \
   --route-table-ids $APP_RT
+
+# exporting variables
+export VPC_ID
+export DATA_A
+export DATA_B

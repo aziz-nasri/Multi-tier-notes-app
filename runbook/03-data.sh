@@ -12,8 +12,7 @@ aws s3api put-bucket-encryption --bucket $ART_BUCKET --server-side-encryption-co
   "{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\",\"KMSMasterKeyID\":\"$KMS_KEY\"},\"BucketKeyEnabled\":true}]}"
 
 # RDS
-aws rds describe-db-engine-versions --engine postgres --default-only --query 'DBEngineVersions[0].EngineVersion' --output text
-PG_VER=<value from above>
+PG_VER=$(aws rds describe-db-engine-versions --engine postgres --default-only --query 'DBEngineVersions[0].EngineVersion' --output text)
 
 aws rds create-db-subnet-group --db-subnet-group-name notes-db-subnets \
   --db-subnet-group-description "notes data tier" --subnet-ids $DATA_A $DATA_B
@@ -40,3 +39,9 @@ cat > ec2-policy.json <<EOF
  {"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::$ART_BUCKET/*"}]}
 EOF
 aws iam put-role-policy --role-name notes-ec2-role --policy-name notes-app-access --policy-document file://ec2-policy.json
+
+# exporting variables
+export DB_HOST
+export DB_SECRET_ARN
+export ART_BUCKET
+export WEB_BUCKET

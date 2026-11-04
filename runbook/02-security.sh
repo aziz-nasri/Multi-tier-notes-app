@@ -39,3 +39,9 @@ aws iam attach-role-policy --role-name notes-ec2-role --policy-arn arn:aws:iam::
 aws iam attach-role-policy --role-name notes-ec2-role --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
 aws iam create-instance-profile --instance-profile-name notes-ec2-profile
 aws iam add-role-to-instance-profile --instance-profile-name notes-ec2-profile --role-name notes-ec2-role
+
+# exporting variables 
+export KMS_KEY
+export APP_SG
+export ALB_SG
+export DB_SG
