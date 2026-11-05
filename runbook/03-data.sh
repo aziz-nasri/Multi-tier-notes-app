@@ -1,4 +1,6 @@
-source "$(dirname "${BASH_SOURCE[0]}")/network.sh"
+#!/bin/bash
+set -euo pipefail
+
 # Buckets
 WEB_BUCKET="${PROJ}-${ACCOUNT_ID}-web";  ART_BUCKET="${PROJ}-${ACCOUNT_ID}-artifacts"
 for b in $WEB_BUCKET $ART_BUCKET; do

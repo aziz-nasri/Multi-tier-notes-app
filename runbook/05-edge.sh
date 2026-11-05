@@ -1,3 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
 ALB_ARN=$(aws elbv2 create-load-balancer --name notes-alb --type application --scheme internet-facing \
   --subnets $PUB_A $PUB_B --security-groups $ALB_SG --tags Key=Project,Value=$PROJ \
   --query 'LoadBalancers[0].LoadBalancerArn' --output text)

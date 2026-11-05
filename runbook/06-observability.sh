@@ -1,3 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
 TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
 aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint you@example.com
 
@@ -165,3 +168,113 @@ aws ec2 create-flow-logs \
     --log-destination-type s3 \
     --log-destination $S3_FLOW_LOGS_ARN \
     --max-aggregation-interval 600
+
+
+TRAIL_NAME="notes-prod-trail"
+BUCKET_NAME_FOR_TRAIL="notes-cloudtrail-logs-${ACCOUNT_ID}"
+
+aws s3api create-bucket \
+    --bucket "${BUCKET_NAME_FOR_TRAIL}" \
+    --region "${AWS_REGION}" \
+    --create-bucket-configuration LocationConstraint="${AWS_REGION}" \
+    --versioning-configuration Status=Enabled
+
+KMS_KEY_ARN=$(aws kms create-key \
+    --description "KMS key for CloudTrail log encryption" \
+    --query "KeyMetadata.Arn" \
+    --output text \
+    --region "$AWS_REGION")
+
+aws kms create-alias \
+    --alias-name "alias/notes-cloudtrail-key" \
+    --target-key-id "$KMS_KEY_ARN" \
+    --region "${AWS_REGION}"
+
+cat << EOF > kms-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Enable IAM User Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Allow CloudTrail to encrypt logs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:EncryptionContext:aws:cloudtrail:arn": "arn:aws:cloudtrail:*:${ACCOUNT_ID}:trail/*"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws kms put-key-policy \
+    --key-id "$KMS_KEY_ARN" \
+    --policy-name "default" \
+    --policy file://kms-policy.json \
+    --region "${ACCOUNT_ID}"
+
+rm kms-policy.json
+
+cat << EOF > s3-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AWSCloudTrailAclCheck",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:GetBucketAcl",
+      "Resource": "arn:aws:s3:::${BUCKET_NAME_FOR_TRAIL}"
+    },
+    {
+      "Sid": "AWSCloudTrailWrite",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::${BUCKET_NAME_FOR_TRAIL}/AWSLogs/${ACCOUNT_ID}/*",
+      "Condition": {
+        "StringEquals": {
+          "s3:x-amz-acl": "bucket-owner-full-control"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws s3api put-bucket-policy \
+    --bucket "$BUCKET_NAME_FOR_TRAIL" \
+    --policy file://s3-policy.json
+
+rm s3-policy.json
+
+aws cloudtrail create-trail \
+    --name "$TRAIL_NAME" \
+    --s3-bucket-name "$BUCKET_NAME_FOR_TRAIL" \
+    --is-multi-region-trail \
+    --enable-log-file-validation \
+    --kms-key-id "$KMS_KEY_ARN" \
+    --region "$AWS_REGION"
+
+aws cloudtrail start-logging --name "$TRAIL_NAME" --region "$AWS_REGION"

@@ -1,3 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
 # Package & upload (ensure requirements.txt includes flask, boto3, psycopg2-binary, gunicorn)
 tar czf api-latest.tgz app.py requirements.txt notesapp.service
 aws s3 cp api-latest.tgz s3://$ART_BUCKET/api-latest.tgz --sse aws:kms --sse-kms-key-id $KMS_KEY

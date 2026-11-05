@@ -1,3 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+
 # security groups
 mk_sg(){ aws ec2 create-security-group --group-name $1 --description "$1" --vpc-id $VPC_ID \
   --tag-specifications "ResourceType=security-group,Tags=[{Key=Project,Value=$PROJ}]" --query GroupId --output text; }
