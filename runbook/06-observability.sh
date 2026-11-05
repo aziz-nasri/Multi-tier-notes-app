@@ -93,3 +93,37 @@ aws cloudwatch put-metric-alarm \
 aws logs create-log-group --log-group-name notes-app --region eu-west-1
 
 
+aws logs put-retention-policy \
+    --log-group-name /aws/rds/instance/notes-db/postgresql \
+    --retention-in-days 30 \
+    --region eu-west-1
+
+
+ALB_LOG_GROUP="/aws/elasticloadbalancing/notes-alb"
+aws logs create-log-group \
+    --log-group-name "$ALB_LOG_GROUP" \
+    --region "$AWS_REGION"
+
+aws logs put-retention-policy \
+    --log-group-name "$ALB_LOG_GROUP" \
+    --retention-in-days 30 \
+    --region "$AWS_REGION"
+
+aws logs put-delivery-source \
+    --name notes-alb-source \
+    --resource-arn "$ALB_ARN" \
+    --log-type ACCESS_LOGS \
+    --region "$AWS_REGION"
+
+DEST_RESOURCE_ARN="arn:aws:logs:$AWS_REGION:$ACCOUNT_ID:log-group:$ALB_LOG_GROUP"
+aws logs put-delivery-destination \
+    --name notes-alb-destination \
+    --delivery-destination-configuration destinationResourceArn="$DEST_RESOURCE_ARN" \
+    --region "$AWS_REGION"
+
+DEST_FULL_ARN="arn:aws:logs:$AWS_REGION:$ACCOUNT_ID:delivery-destination:notes-alb-destination"
+aws logs create-delivery \
+    --delivery-source-name notes-alb-source \
+    --delivery-destination-arn "$DEST_FULL_ARN" \
+    --region "$AWS_REGION"
+
