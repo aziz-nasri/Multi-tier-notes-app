@@ -13,6 +13,32 @@ cd /opt/notes
 aws s3 cp s3://$ART_BUCKET/api-latest.tgz . 
 tar xzf api-latest.tgz
 curl -sfo rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+
+
+mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+cat << 'CWEOF' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/opt/notes/app.log",
+            "log_group_name": "/aws/ec2/notes-app",
+            "log_stream_name_prefix": "{instance_id}-",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  }
+}
+CWEOF
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config \
+    -m ec2 \
+    -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+    -s
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
@@ -37,7 +63,8 @@ After=network-online.target
 User=notes
 WorkingDirectory=/opt/notes
 EnvironmentFile=/opt/notes/.env
-ExecStart=/opt/notes/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:3000 app:app
+ExecStart=/opt/notes/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:3000 [Service]
+ExecStart=/opt/notes/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:3000 --access-logfile /opt/notes/app.log --error-logfile /opt/notes/app.log app:app
 Restart=always
 
 [Install]

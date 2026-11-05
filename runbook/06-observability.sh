@@ -89,3 +89,7 @@ aws cloudwatch put-metric-alarm \
     --treat-missing-data notBreaching \
     --alarm-actions $TOPIC
 
+# CloudWatch Logs
+aws logs create-log-group --log-group-name notes-app --region eu-west-1
+
+
