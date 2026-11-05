@@ -24,3 +24,68 @@ aws cloudwatch put-metric-alarm \
     --comparison-operator GreaterThanThreshold \
     --alarm-actions $TOPIC
 
+aws cloudwatch put-metric-alarm \
+    --alarm-name notes-alb-unhealthy-hosts \
+    --namespace AWS/ApplicationELB \
+    --metric-name UnHealthyHostCount \
+    --dimensions Name=LoadBalancer,Value=$ALB_DIM Name=TargetGroup,Value=$TG_DIM \
+    --statistic Maximum \
+    --period 60 \
+    --evaluation-periods 1 \
+    --threshold 0 \
+    --comparison-operator GreaterThanThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions $TOPIC
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name notes-rds-low-storage \
+    --namespace AWS/RDS \
+    --metric-name FreeStorageSpace \
+    --dimensions Name=DBInstanceIdentifier,Value=notes-db \
+    --statistic Average \
+    --period 300 \
+    --evaluation-periods 1 \
+    --threshold 5000000000 \
+    --comparison-operator LessThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions $TOPIC
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name notes-rds-high-connections \
+    --namespace AWS/RDS \
+    --metric-name DatabaseConnections \
+    --dimensions Name=DBInstanceIdentifier,Value=notes-db \
+    --statistic Average \
+    --period 300 \
+    --evaluation-periods 1 \
+    --threshold 100 \
+    --comparison-operator GreaterThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions $TOPIC
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name notes-alb-p95-latency \
+    --namespace AWS/ApplicationELB \
+    --metric-name TargetResponseTime \
+    --dimensions Name=LoadBalancer,Value=$ALB_DIM \
+    --extended-statistic "p95" \
+    --period 300 \
+    --evaluation-periods 1 \
+    --threshold 1.5 \
+    --comparison-operator GreaterThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions $TOPIC
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name notes-nat-port-allocation-error \
+    --namespace AWS/NATGateway \
+    --metric-name ErrorPortAllocation \
+    --dimensions Name=NatGatewayId,Value=$NAT_ID \
+    --statistic Sum \
+    --period 300 \
+    --evaluation-periods 1 \
+    --threshold 1 \
+    --comparison-operator GreaterThanOrEqualToThreshold \
+    --treat-missing-data notBreaching \
+    --alarm-actions $TOPIC
+
