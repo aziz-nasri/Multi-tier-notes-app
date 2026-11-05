@@ -136,6 +136,28 @@ aws s3api create-bucket \
     --region "$AWS_REGION" \
     --create-bucket-configuration LocationConstraint="$AWS_REGION"
 S3_FLOW_LOGS_ARN="arn:aws:s3:::${BUCKET_NAME}"
+
+cat << EOF > flow-log-bucket-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VPCFlowLogsPublish",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "vpc-flow-logs.amazonaws.com"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "$S3_FLOW_LOGS_ARN/*"
+    }
+  ]
+}
+EOF
+aws s3api put-bucket-policy \
+    --bucket "$BUCKET_NAME" \
+    --policy file://flow-log-bucket-policy.json
+rm flow-log-bucket-policy.json
+
 aws ec2 create-flow-logs \
     --resource-type VPC \
     --resource-ids $VPC_ID \
