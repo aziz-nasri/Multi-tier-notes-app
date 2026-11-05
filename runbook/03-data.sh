@@ -1,6 +1,6 @@
 source "$(dirname "${BASH_SOURCE[0]}")/network.sh"
 # Buckets
-WEB_BUCKET=$PROJ-$ACCOUNT_ID-web;  ART_BUCKET=$PROJ-$ACCOUNT_ID-artifacts
+WEB_BUCKET="${PROJ}-${ACCOUNT_ID}-web";  ART_BUCKET="${PROJ}-${ACCOUNT_ID}-artifacts"
 for b in $WEB_BUCKET $ART_BUCKET; do
   aws s3api create-bucket --bucket $b --region $AWS_REGION \
     --create-bucket-configuration LocationConstraint=$AWS_REGION

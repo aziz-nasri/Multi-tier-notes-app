@@ -127,3 +127,19 @@ aws logs create-delivery \
     --delivery-destination-arn "$DEST_FULL_ARN" \
     --region "$AWS_REGION"
 
+
+
+BUCKET_NAME="${PROJ}-${ACCOUNT_ID}-notes-vpc-flow-logs"
+AWS_REGION="eu-west-1"
+aws s3api create-bucket \
+    --bucket "$BUCKET_NAME" \
+    --region "$AWS_REGION" \
+    --create-bucket-configuration LocationConstraint="$AWS_REGION"
+S3_FLOW_LOGS_ARN="arn:aws:s3:::${BUCKET_NAME}"
+aws ec2 create-flow-logs \
+    --resource-type VPC \
+    --resource-ids $VPC_ID \
+    --traffic-type ALL \
+    --log-destination-type s3 \
+    --log-destination $S3_FLOW_LOGS_ARN \
+    --max-aggregation-interval 600
