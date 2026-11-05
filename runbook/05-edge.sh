@@ -25,3 +25,6 @@ aws s3api put-bucket-policy --bucket $WEB_BUCKET --policy file://web-policy.json
 # deploying the frontend
 npm run build && aws s3 sync dist/ s3://$WEB_BUCKET --delete
 aws cloudfront create-invalidation --distribution-id <DIST_ID> --paths "/*"
+
+# export variables
+export ALB_ARN
