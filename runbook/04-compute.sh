@@ -71,3 +71,6 @@ aws autoscaling create-auto-scaling-group --auto-scaling-group-name notes-asg \
 aws autoscaling put-scaling-policy --auto-scaling-group-name notes-asg --policy-name cpu50 \
   --policy-type TargetTrackingScaling --target-tracking-configuration \
   '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"},"TargetValue":50.0}'
+
+  # exporting variables
+  export TG_ARN

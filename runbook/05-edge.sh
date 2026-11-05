@@ -13,3 +13,11 @@ LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol
 aws elbv2 create-rule --listener-arn $LISTENER_ARN --priority 10 \
   --conditions "[{\"Field\":\"http-header\",\"HttpHeaderConfig\":{\"HttpHeaderName\":\"X-Origin-Verify\",\"Values\":[\"$ORIGIN_SECRET\"]}}]" \
   --actions "[{\"Type\":\"forward\",\"TargetGroupArn\":\"$TG_ARN\"}]"
+
+# Bucket policy for OAC
+cat > web-policy.json <<EOF
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"cloudfront.amazonaws.com"},
+ "Action":"s3:GetObject","Resource":"arn:aws:s3:::$WEB_BUCKET/*",
+ "Condition":{"StringEquals":{"AWS:SourceArn":"arn:aws:cloudfront::$ACCOUNT_ID:distribution/<DIST_ID>"}}}]}
+EOF
+aws s3api put-bucket-policy --bucket $WEB_BUCKET --policy file://web-policy.json
