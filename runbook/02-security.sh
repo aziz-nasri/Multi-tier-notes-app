@@ -28,12 +28,7 @@ aws ec2 authorize-security-group-egress --group-id $APP_SG \
   --ip-permissions "IpProtocol=tcp,FromPort=5432,ToPort=5432,UserIdGroupPairs=[{GroupId=$DB_SG}]" \
                    "IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]"
 
-# KMS and IAM role
-KMS_KEY=$(aws kms create-key --description "$PROJ CMK" --tags TagKey=Project,TagValue=$PROJ \
-  --query KeyMetadata.KeyId --output text)
-aws kms create-alias --alias-name alias/$PROJ --target-key-id $KMS_KEY
-aws kms enable-key-rotation --key-id $KMS_KEY
-
+#IAM role
 cat > trust.json <<'EOF'
 {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}
 EOF
@@ -43,8 +38,182 @@ aws iam attach-role-policy --role-name notes-ec2-role --policy-arn arn:aws:iam::
 aws iam create-instance-profile --instance-profile-name notes-ec2-profile
 aws iam add-role-to-instance-profile --instance-profile-name notes-ec2-profile --role-name notes-ec2-role
 
+
+# KMS keys
+cat << EOF > artifact-kms-policy.json
+{
+  "Version": "2012-10-17",
+  "Id": "artifact-bucket-cmk-policy",
+  "Statement": [
+    {
+      "Sid": "EnableRootAccountAdministration",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowEC2InstanceRuntimeRead",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:role/notes-ec2-role"
+      },
+      "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowS3ServiceAccess",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "s3.amazonaws.com"
+      },
+      "Action": [
+        "kms:Decrypt",
+        "kms:GenerateDataKey*",
+        "kms:DescribeKey"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+KMS_KEY_FOR_ARTI=$(aws kms create-key --description "$PROJ CMK" --tags TagKey=Project,TagValue=$PROJ \
+  --query KeyMetadata.KeyId --output text)
+aws kms create-alias --alias-name alias/$PROJ --target-key-id $KMS_KEY_FOR_ARTI
+aws kms enable-key-rotation --key-id $KMS_KEY_FOR_ARTI
+
+rm artifact-kms-policy.json
+
+KMS_KEY_ARN_FOR_CT=$(aws kms create-key \
+    --description "KMS key for CloudTrail log encryption" \
+    --query "KeyMetadata.Arn" \
+    --output text \
+    --region "$AWS_REGION")
+
+aws kms create-alias \
+    --alias-name "alias/notes-cloudtrail-key" \
+    --target-key-id "$KMS_KEY_ARN_FOR_CT" \
+    --region "${AWS_REGION}"
+
+cat << EOF > kms-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Enable IAM User Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Allow CloudTrail to encrypt logs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": [
+        "kms:GenerateDataKey*",
+        "kms:Decrypt"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:EncryptionContext:aws:cloudtrail:arn": "arn:aws:cloudtrail:*:${ACCOUNT_ID}:trail/*"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws kms put-key-policy \
+    --key-id "$KMS_KEY_ARN_FOR_CT" \
+    --policy-name "default" \
+    --policy file://kms-policy.json \
+    --region "${ACCOUNT_ID}"
+
+aws kms enable-key-rotation --key-id $KMS_KEY_ARN_FOR_CT
+
+rm kms-policy.json
+
+cat << EOF > backup-kms-policy.json
+{
+  "Version": "2012-10-17",
+  "Id": "aws-backup-cmk-policy",
+  "Statement": [
+    {
+      "Sid": "EnableRootAccountAdministration",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:root"
+      },
+      "Action": "kms:*",
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowAWSBackupServicePrincipal",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "backup.amazonaws.com"
+      },
+      "Action": [
+        "kms:CreateGrant",
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:GenerateDataKey*",
+        "kms:ReEncrypt*",
+        "kms:RetireGrant"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowAWSBackupServiceLinkedRole",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::${ACCOUNT_ID}:role/aws-service-role/backup.amazonaws.com/AWSServiceRoleForBackup"
+      },
+      "Action": [
+        "kms:CreateGrant",
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:GenerateDataKey*",
+        "kms:ReEncrypt*",
+        "kms:RetireGrant"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+KMS_KEY_ARN_FOR_BACKUP=$(aws kms create-key \
+    --description "KMS key for AWS Backup Vault" \
+    --policy file://backup-kms-policy.json \
+    --query "KeyMetadata.Arn" \
+    --output text \
+    --region "$AWS_REGION")
+
+aws kms create-alias \
+    --alias-name "alias/notes-backup-key" \
+    --target-key-id "$KMS_KEY_ARN" \
+    --region "$AWS_REGION"
+
+aws kms enable-key-rotation --key-id $KMS_KEY_ARN_FOR_BACKUP
+
+rm backup-kms-policy.json
+
 # exporting variables 
-export KMS_KEY
+export KMS_KEY_FOR_ARTI
+export KMS_KEY_ARN_FOR_CT
+export KMS_KEY_ARN_FOR_BACKUP
 export APP_SG
 export ALB_SG
 export DB_SG

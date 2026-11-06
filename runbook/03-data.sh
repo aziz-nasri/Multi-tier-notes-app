@@ -11,7 +11,7 @@ for b in $WEB_BUCKET $ART_BUCKET; do
   aws s3api put-bucket-versioning --bucket $b --versioning-configuration Status=Enabled
 done
 aws s3api put-bucket-encryption --bucket $ART_BUCKET --server-side-encryption-configuration \
-  "{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\",\"KMSMasterKeyID\":\"$KMS_KEY\"},\"BucketKeyEnabled\":true}]}"
+  "{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"aws:kms\",\"KMSMasterKeyID\":\"$KMS_KEY_FOR_ARTI\"},\"BucketKeyEnabled\":true}]}"
 
 # RDS
 PG_VER=$(aws rds describe-db-engine-versions --engine postgres --default-only --query 'DBEngineVersions[0].EngineVersion' --output text)
