@@ -240,3 +240,48 @@ BACKUP_PLAN_ID=$(aws backup create-backup-plan --backup-plan '{
 }' --query "BackupPlanId" --output text)
 aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-selection \
  '{"SelectionName":"tagged","IamRoleArn":"arn:aws:iam::'$ACCOUNT_ID':role/service-role/AWSBackupDefaultServiceRole","ListOfTags":[{"ConditionType":"STRINGEQUALS","ConditionKey":"Backup","ConditionValue":"true"}]}'
+
+
+ # Budget Alerts
+   aws budgets create-budget --account-id $ACCOUNT_ID --budget '{"BudgetName":"notes-monthly","BudgetLimit":{"Amount":"100","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+   --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"you@example.com"}]}]'
+
+   aws ce update-cost-allocation-tags-status \
+    --cost-allocation-tags-status '[{"TagKey": "Project", "Status": "Active"}]'
+
+    aws ce get-cost-and-usage \
+    --time-period Start=2026-11-01,End=2026-12-01 \
+    --granularity MONTHLY \
+    --metrics "UnblendedCost" \
+    --filter '{"Tags": {"Key": "Project", "Values": ["notesapp"]}}'
+
+    # cost anomaly detection
+    MONITOR_ARN=$(aws ce create-anomaly-monitor \
+    --anomaly-monitor '{
+        "MonitorName": "notesapp-cost-monitor",
+        "MonitorType": "DIMENSIONAL",
+        "MonitorDimension": "TAG",
+        "MonitorSpecification": {
+            "Tags": {
+                "Key": "Project"
+            }
+        }
+    }' \
+    --query "MonitorArn" \
+    --output text \
+    --region "$AWS_REGION")
+
+    aws ce create-anomaly-subscription \
+    --anomaly-subscription '{
+        "SubscriptionName": "notesapp-cost-alerts",
+        "MonitorArnList": ["'"$MONITOR_ARN"'"],
+        "Subscribers": [
+            {
+                "Type": "EMAIL",
+                "Address": "'"you@example.com"'"
+            }
+        ],
+        "Frequency": "DAILY",
+        "ThresholdExpression": "{\"Dimensions\": {\"Key\": \"ANOMALY_TOTAL_IMPACT_ABSOLUTE\", \"MatchOptions\": [\"GREATER_THAN_OR_EQUAL\"], \"Values\": [\"50\"]}}"
+    }' \
+    --region "$AWS_REGION"
