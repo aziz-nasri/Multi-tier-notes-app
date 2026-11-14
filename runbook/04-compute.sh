@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-
 PROJECT_PREFIX="/notesapp/outputs"
+
 # Helper function to write to SSM Parameter Store
 save_to_ssm() {
     local param_name=$1
@@ -16,6 +16,7 @@ save_to_ssm() {
         --overwrite > /dev/null
 }
 
+echo "Fetching infrastructure variables from SSM Parameter Store..."
 ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query "Parameter.Value" --output text)
 PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
 AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
@@ -24,24 +25,33 @@ APP_B=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_b" --query "Paramete
 APP_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_sg" --query "Parameter.Value" --output text)
 DB_HOST=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_host" --query "Parameter.Value" --output text)
 DB_SECRET_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_secret_arn" --with-decryption --query "Parameter.Value" --output text)
+ART_BUCKET=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/art_bucket" --query "Parameter.Value" --output text)
+KMS_KEY_FOR_ARTI=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for_arti" --query "Parameter.Value" --output text)
+VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parameter.Value" --output text)
 
-# Package & upload (ensure requirements.txt includes flask, boto3, psycopg2-binary, gunicorn)
+# Package & upload application code
+echo "Packaging application artifacts..."
 tar czf api-latest.tgz app.py requirements.txt notesapp.service
+
+echo "Uploading package to S3..."
 aws s3 cp api-latest.tgz s3://$ART_BUCKET/api-latest.tgz --sse aws:kms --sse-kms-key-id $KMS_KEY_FOR_ARTI
 
-# User data
+# User data script for EC2 instances
+echo "Generating EC2 user data configuration..."
 cat > userdata.sh <<EOF
 #!/bin/bash
 set -euxo pipefail
+
 dnf install -y python3 python3-pip amazon-cloudwatch-agent
 useradd -r -m notes
 mkdir -p /opt/notes
 cd /opt/notes
+
 aws s3 cp s3://$ART_BUCKET/api-latest.tgz . 
 tar xzf api-latest.tgz
 curl -sfo rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
-
+# Configure CloudWatch Agent
 mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
 cat << 'CWEOF' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 {
@@ -61,19 +71,19 @@ cat << 'CWEOF' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.js
   }
 }
 CWEOF
+
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
     -a fetch-config \
     -m ec2 \
     -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
     -s
+
+# Setup Python virtual environment
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
-DB_HOST=\$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].Endpoint.Address' --output text --region $AWS_REGION)
-DB_SECRET_ARN=\$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text --region $AWS_REGION)
-EOF
-
+# Generate .env file
 cat << ENV > /opt/notes/.env
 AWS_REGION=$AWS_REGION
 DB_HOST=$DB_HOST
@@ -81,26 +91,14 @@ DB_SECRET_ARN=$DB_SECRET_ARN
 PORT=3000
 ENV
 
-cat > /etc/systemd/system/notes.service << 'UNIT'
-[Unit]
-Description=Notes API (Python Flask)
-After=network-online.target
+# Install and configure systemd service
+cp /opt/notes/notesapp.service /etc/systemd/system/notes.service
+systemctl daemon-reload
+systemctl enable --now notes
+EOF
 
-[Service]
-User=notes
-WorkingDirectory=/opt/notes
-EnvironmentFile=/opt/notes/.env
-ExecStart=/opt/notes/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:3000 [Service]
-ExecStart=/opt/notes/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:3000 --access-logfile /opt/notes/app.log --error-logfile /opt/notes/app.log app:app
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-systemctl daemon-reload && systemctl enable --now notes
-
-# Launch template (IMDSv2 enforced, encrypted EBS)
+# Launch template configuration
+echo "Creating EC2 Launch Template..."
 cat > lt.json <<EOF
 {"ImageId":"resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64",
  "InstanceType":"t4g.micro",
@@ -111,17 +109,21 @@ cat > lt.json <<EOF
  "TagSpecifications":[{"ResourceType":"instance","Tags":[{"Key":"Project","Value":"$PROJ"}]}],
  "UserData":"$(base64 -w0 userdata.sh)"}
 EOF
+
 aws ec2 create-launch-template --launch-template-name notes-lt --launch-template-data file://lt.json
 
 # Target group + ASG
+echo "Creating ALB Target Group and Auto Scaling Group..."
 TG_ARN=$(aws elbv2 create-target-group --name notes-tg --protocol HTTP --port 3000 --vpc-id $VPC_ID \
   --target-type instance --health-check-path /api/health --health-check-interval-seconds 15 \
   --healthy-threshold-count 2 --query 'TargetGroups[0].TargetGroupArn' --output text)
+
 aws autoscaling create-auto-scaling-group --auto-scaling-group-name notes-asg \
   --launch-template LaunchTemplateName=notes-lt,Version='$Latest' \
   --min-size 2 --max-size 4 --desired-capacity 2 --vpc-zone-identifier "$APP_A,$APP_B" \
   --target-group-arns $TG_ARN --health-check-type ELB --health-check-grace-period 180 \
   --tags Key=Project,Value=$PROJ,PropagateAtLaunch=true
+
 aws autoscaling put-scaling-policy --auto-scaling-group-name notes-asg --policy-name cpu50 \
   --policy-type TargetTrackingScaling --target-tracking-configuration \
   '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"},"TargetValue":50.0}'
