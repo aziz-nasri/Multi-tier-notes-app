@@ -1,9 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
+
+PROJECT_PREFIX="/notesapp/outputs"
+# Helper function to write to SSM Parameter Store
+save_to_ssm() {
+    local param_name=$1
+    local param_value=$2
+    
+    echo "Storing $param_name ($param_value) in SSM..."
+    aws ssm put-parameter \
+        --name "${PROJECT_PREFIX}/${param_name}" \
+        --value "$param_value" \
+        --type "String" \
+        --overwrite > /dev/null
+}
+
+ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query "Parameter.Value" --output text)
+PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
+AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
+APP_A=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_a" --query "Parameter.Value" --output text)
+APP_B=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_b" --query "Parameter.Value" --output text)
+APP_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_sg" --query "Parameter.Value" --output text)
+DB_HOST=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_host" --query "Parameter.Value" --output text)
+DB_SECRET_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_secret_arn" --with-decryption --query "Parameter.Value" --output text)
+
 # Package & upload (ensure requirements.txt includes flask, boto3, psycopg2-binary, gunicorn)
 tar czf api-latest.tgz app.py requirements.txt notesapp.service
-aws s3 cp api-latest.tgz s3://$ART_BUCKET/api-latest.tgz --sse aws:kms --sse-kms-key-id $KMS_KEY
+aws s3 cp api-latest.tgz s3://$ART_BUCKET/api-latest.tgz --sse aws:kms --sse-kms-key-id $KMS_KEY_FOR_ARTI
 
 # User data
 cat > userdata.sh <<EOF
@@ -50,10 +74,10 @@ DB_HOST=\$(aws rds describe-db-instances --db-instance-identifier notes-db --que
 DB_SECRET_ARN=\$(aws rds describe-db-instances --db-instance-identifier notes-db --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text --region $AWS_REGION)
 EOF
 
-cat << 'ENV' > /opt/notes/.env
+cat << ENV > /opt/notes/.env
 AWS_REGION=$AWS_REGION
-DB_HOST=\$DB_HOST
-DB_SECRET_ARN=\$DB_SECRET_ARN
+DB_HOST=$DB_HOST
+DB_SECRET_ARN=$DB_SECRET_ARN
 PORT=3000
 ENV
 
@@ -102,5 +126,7 @@ aws autoscaling put-scaling-policy --auto-scaling-group-name notes-asg --policy-
   --policy-type TargetTrackingScaling --target-tracking-configuration \
   '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"},"TargetValue":50.0}'
 
-  # exporting variables
-  export TG_ARN
+# Store infrastructure outputs in SSM Parameter Store
+save_to_ssm "tg_arn" "$TG_ARN"
+
+echo "All infrastructure outputs successfully stored in SSM Parameter Store!"

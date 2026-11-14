@@ -1,10 +1,31 @@
 #!/bin/bash
 set -euo pipefail
 
+PROJECT_PREFIX="/notesapp/outputs"
+# Helper function to write to SSM Parameter Store
+save_to_ssm() {
+    local param_name=$1
+    local param_value=$2
+    
+    echo "Storing $param_name ($param_value) in SSM..."
+    aws ssm put-parameter \
+        --name "${PROJECT_PREFIX}/${param_name}" \
+        --value "$param_value" \
+        --type "String" \
+        --overwrite > /dev/null
+}
+
+ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query "Parameter.Value" --output text)
+PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
+AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
+ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_arn" --query "Parameter.Value" --output text)
+ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
+
 TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
 aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint you@example.com
 
 ALB_DIM=$(echo $ALB_ARN | cut -d/ -f2-)
+TG_DIM=$(echo $TG_ARN | cut -d/ -f2-)
 aws cloudwatch put-metric-alarm \
     --alarm-name notes-alb-5xx \
     --namespace AWS/ApplicationELB \
