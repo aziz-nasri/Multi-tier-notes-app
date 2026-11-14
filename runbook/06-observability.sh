@@ -20,9 +20,10 @@ PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.
 AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
 ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_arn" --query "Parameter.Value" --output text)
 ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
+EMAIL=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/email" --query "Parameter.Value" --output text)
 
 TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
-aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint you@example.com
+aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint $EMAIL
 
 ALB_DIM=$(echo $ALB_ARN | cut -d/ -f2-)
 TG_DIM=$(echo $TG_ARN | cut -d/ -f2-)
@@ -264,8 +265,10 @@ aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-sel
 
 
  # Budget Alerts
-   aws budgets create-budget --account-id $ACCOUNT_ID --budget '{"BudgetName":"notes-monthly","BudgetLimit":{"Amount":"100","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
-   --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"you@example.com"}]}]'
+   aws budgets create-budget \
+  --account-id "$ACCOUNT_ID" \
+  --budget '{"BudgetName":"notes-monthly","BudgetLimit":{"Amount":"100","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+  --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"'"$EMAIL"'"}]}]'
 
    aws ce update-cost-allocation-tags-status \
     --cost-allocation-tags-status '[{"TagKey": "Project", "Status": "Active"}]'
@@ -299,7 +302,7 @@ aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-sel
         "Subscribers": [
             {
                 "Type": "EMAIL",
-                "Address": "'"you@example.com"'"
+                "Address": "'"$EMAIL"'"
             }
         ],
         "Frequency": "DAILY",
