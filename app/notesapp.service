@@ -1,0 +1,21 @@
+[Unit]
+Description=Notes Flask Application
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+User=notes
+Group=notes
+WorkingDirectory=/opt/notes
+EnvironmentFile=/opt/notes/.env
+ExecStart=/opt/notes/venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
