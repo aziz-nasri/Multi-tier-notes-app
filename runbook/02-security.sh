@@ -18,24 +18,28 @@ save_to_ssm() {
 ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query "Parameter.Value" --output text)
 PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
 AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
+VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parameter.Value" --output text)
+
 
 # security groups
 echo "Creating security groups (ALB, App, DB)..."
-VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parameter.Value" --output text)
 mk_sg(){ aws ec2 create-security-group --group-name $1 --description "$1" --vpc-id $VPC_ID \
   --tag-specifications "ResourceType=security-group,Tags=[{Key=Project,Value=$PROJ}]" --query GroupId --output text; }
 ALB_SG=$(mk_sg alb-sg); APP_SG=$(mk_sg app-sg); DB_SG=$(mk_sg db-sg)
+save_to_ssm "alb_sg" "$ALB_SG"; save_to_ssm "app_sg" "$APP_SG"; save_to_ssm "db_sg" "$DB_SG"
 
-:<<'Cloudfront'
+:<<"CF"
 echo "Fetching CloudFront managed prefix list..."
 CF_PL=$(aws ec2 describe-managed-prefix-lists \
   --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
   --query 'PrefixLists[0].PrefixListId' --output text)
-Cloudfront  
+CF
 
 echo "Authorizing security group ingress rules..."
+#aws ec2 authorize-security-group-ingress --group-id $ALB_SG \
+#  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=$CF_PL}]" for cloudfront
 aws ec2 authorize-security-group-ingress --group-id $ALB_SG \
-  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=$CF_PL}]"
+  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]"
 aws ec2 authorize-security-group-ingress --group-id $APP_SG \
   --ip-permissions "IpProtocol=tcp,FromPort=3000,ToPort=3000,UserIdGroupPairs=[{GroupId=$ALB_SG}]"
 aws ec2 authorize-security-group-ingress --group-id $DB_SG \
@@ -43,7 +47,7 @@ aws ec2 authorize-security-group-ingress --group-id $DB_SG \
 
 # Replace default allow-all egress with scoped egress
 echo "Replacing default allow-all egress rules with scoped egress..."
-for sg in $ALB_SG $APP_SG $DB_SG; do
+for sg in $APP_SG $DB_SG; do
   aws ec2 revoke-security-group-egress --group-id $sg \
     --ip-permissions 'IpProtocol=-1,IpRanges=[{CidrIp=0.0.0.0/0}]'; done
 
@@ -111,6 +115,9 @@ cat << EOF > artifact-kms-policy.json
 EOF
 KMS_KEY_FOR_ARTI=$(aws kms create-key --description "$PROJ artifact CMK" --tags TagKey=Project,TagValue=$PROJ \
   --query KeyMetadata.KeyId --output text)
+
+save_to_ssm "key_for_arti" "$KMS_KEY_FOR_ARTI"
+
 aws kms create-alias --alias-name alias/$PROJ --target-key-id $KMS_KEY_FOR_ARTI
 aws kms enable-key-rotation --key-id $KMS_KEY_FOR_ARTI
 rm artifact-kms-policy.json
@@ -121,6 +128,8 @@ KMS_KEY_ARN_FOR_CT=$(aws kms create-key \
     --query "KeyMetadata.Arn" \
     --output text \
     --region "$AWS_REGION")
+
+save_to_ssm "key_for_cloudtrail" "$KMS_KEY_ARN_FOR_CT"
 
 aws kms create-alias \
     --alias-name "alias/notes-cloudtrail-key" \
@@ -165,7 +174,7 @@ aws kms put-key-policy \
     --key-id "$KMS_KEY_ARN_FOR_CT" \
     --policy-name "default" \
     --policy file://kms-policy.json \
-    --region "${ACCOUNT_ID}"
+    --region "${AWS_REGION}"
 
 aws kms enable-key-rotation --key-id $KMS_KEY_ARN_FOR_CT
 rm kms-policy.json
@@ -228,6 +237,9 @@ KMS_KEY_ARN_FOR_BACKUP=$(aws kms create-key \
     --output text \
     --region "$AWS_REGION")
 
+# Store output in SSM Parameter Store
+save_to_ssm "key_for_backup" "$KMS_KEY_ARN_FOR_BACKUP"
+
 aws kms create-alias \
     --alias-name "alias/notes-backup-key" \
     --target-key-id "$KMS_KEY_ARN_FOR_BACKUP" \
@@ -236,11 +248,4 @@ aws kms create-alias \
 aws kms enable-key-rotation --key-id $KMS_KEY_ARN_FOR_BACKUP
 rm backup-kms-policy.json
 
-# Store infrastructure outputs in SSM Parameter Store
-save_to_ssm "key_for_arti" "$KMS_KEY_FOR_ARTI"
-save_to_ssm "key_for_backup" "$KMS_KEY_ARN_FOR_BACKUP"
-save_to_ssm "key_for_cloudtrail" "$KMS_KEY_ARN_FOR_CT"
-save_to_ssm "alb_sg" "$ALB_SG"; save_to_ssm "app_sg" "$APP_SG"; save_to_ssm "db_sg" "$DB_SG"
-
-echo "All infrastructure outputs successfully stored in SSM Parameter Store!"
 echo "Security, IAM, and KMS setup completed successfully!"
