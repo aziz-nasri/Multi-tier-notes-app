@@ -86,3 +86,5 @@ cat > ec2-policy.json <<EOF
  {"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::$ART_BUCKET/*"}]}
 EOF
 aws iam put-role-policy --role-name notes-ec2-role --policy-name notes-app-access --policy-document file://ec2-policy.json
+
+rm ec2-policy.json

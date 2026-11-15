@@ -31,6 +31,7 @@ VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parame
 
 # Package & upload application code
 echo "Packaging application artifacts..."
+cd ../app
 tar czf api-latest.tgz app.py requirements.txt notesapp.service
 
 echo "Uploading package to S3..."
@@ -92,7 +93,7 @@ PORT=3000
 ENV
 
 # Install and configure systemd service
-cp /opt/notes/notesapp.service /etc/systemd/system/notes.service
+mv /opt/notes/notesapp.service /etc/systemd/system/notes.service
 systemctl daemon-reload
 systemctl enable --now notes
 EOF
@@ -118,6 +119,8 @@ TG_ARN=$(aws elbv2 create-target-group --name notes-tg --protocol HTTP --port 30
   --target-type instance --health-check-path /api/health --health-check-interval-seconds 15 \
   --healthy-threshold-count 2 --query 'TargetGroups[0].TargetGroupArn' --output text)
 
+save_to_ssm "tg_arn" "$TG_ARN"
+
 aws autoscaling create-auto-scaling-group --auto-scaling-group-name notes-asg \
   --launch-template LaunchTemplateName=notes-lt,Version='$Latest' \
   --min-size 2 --max-size 4 --desired-capacity 2 --vpc-zone-identifier "$APP_A,$APP_B" \
@@ -128,7 +131,6 @@ aws autoscaling put-scaling-policy --auto-scaling-group-name notes-asg --policy-
   --policy-type TargetTrackingScaling --target-tracking-configuration \
   '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ASGAverageCPUUtilization"},"TargetValue":50.0}'
 
-# Store infrastructure outputs in SSM Parameter Store
-save_to_ssm "tg_arn" "$TG_ARN"
-
-echo "All infrastructure outputs successfully stored in SSM Parameter Store!"
+rm lt.json
+rm userdata.sh
+rm api-latest.tgz
