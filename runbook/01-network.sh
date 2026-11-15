@@ -15,8 +15,11 @@ save_to_ssm() {
         --overwrite > /dev/null
 }
 
-# VPC
 PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
+ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query "Parameter.Value" --output text)
+AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
+
+# VPC
 echo "Creating VPC for project $PROJ..."
 VPC_ID=$(aws ec2 create-vpc --cidr-block 10.0.0.0/16 \
   --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=$PROJ-vpc},{Key=Project,Value=$PROJ}]" \
@@ -30,11 +33,11 @@ mk_subnet(){ aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block $1 --availabili
   --query Subnet.SubnetId --output text; }
 
 echo "Creating public subnets..."
-PUB_A=$(mk_subnet 10.0.0.0/24  a pub-a);  PUB_B=$(mk_subnet 10.0.1.0/24  b pub-b)
+PUB_A=$(mk_subnet 10.0.0.0/24  "${AWS_REGION}a" pub-a);  PUB_B=$(mk_subnet 10.0.1.0/24  "${AWS_REGION}b" pub-b)
 echo "Creating app subnets..."
-APP_A=$(mk_subnet 10.0.10.0/24 a app-a);  APP_B=$(mk_subnet 10.0.11.0/24 b app-b)
+APP_A=$(mk_subnet 10.0.10.0/24 "${AWS_REGION}a" app-a);  APP_B=$(mk_subnet 10.0.11.0/24 "${AWS_REGION}b" app-b)
 echo "Creating data subnets..."
-DATA_A=$(mk_subnet 10.0.20.0/24 a data-a); DATA_B=$(mk_subnet 10.0.21.0/24 b data-b)
+DATA_A=$(mk_subnet 10.0.20.0/24 "${AWS_REGION}a" data-a); DATA_B=$(mk_subnet 10.0.21.0/24 "${AWS_REGION}b" data-b)
 
 # IGW + public route table
 echo "Setting up Internet Gateway and public route table..."
