@@ -58,11 +58,8 @@ cat > web-policy.json <<EOF
 EOF
 # aws s3api put-bucket-policy --bucket $WEB_BUCKET --policy file://web-policy.json
 
-echo "Building frontend application..."
-npm run build 
-
 echo "Syncing frontend build artifacts to S3 bucket ($WEB_BUCKET)..."
-aws s3 sync dist/ s3://$WEB_BUCKET --delete
+aws s3 sync ../frontend/dist/ s3://$WEB_BUCKET --delete
 
 #echo "Creating CloudFront cache invalidation..."
 # aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DIST_ID" --paths "/*"
