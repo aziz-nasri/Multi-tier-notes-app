@@ -1,8 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-export AWS_REGION="eu-west-1"
-export AWS_DEFAULT_REGION="eu-west-1"
+export AWS_PAGER=""
 
 PROJECT_PREFIX="/notesapp/outputs"
 # Helper function to write to SSM Parameter Store
