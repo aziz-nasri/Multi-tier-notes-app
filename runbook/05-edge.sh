@@ -25,7 +25,7 @@ PUB_B=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/pub_b" --query "Paramete
 ALB_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_sg" --query "Parameter.Value" --output text)
 WEB_BUCKET=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/web_bucket" --query "Parameter.Value" --output text)
 TG_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
-ALB_CERT_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_cert_arn" --query "Parameter.Value" --output text)
+
 # TODO: Uncomment this later when CloudFront is integrated
 # CLOUDFRONT_DIST_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/cloudfront_dist_id" --query "Parameter.Value" --output text)
 
@@ -41,9 +41,10 @@ aws elbv2 modify-load-balancer-attributes --load-balancer-arn $ALB_ARN --attribu
 # TODO: Uncomment this later when CloudFront is integrated
 # ORIGIN_SECRET=$(openssl rand -hex 24)
 
-echo "Creating HTTPS listener on port 443..."
-LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTPS --port 443 \
-  --certificates CertificateArn=$ALB_CERT_ARN --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
+echo "Creating HTTP listener on port 80..."
+# change to HTTPS on port 443 when a domain and certificate are ready.
+LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTP --port 80 \
+  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
   --default-actions '[{"Type":"fixed-response","FixedResponseConfig":{"StatusCode":"403","ContentType":"text/plain","MessageBody":"Forbidden"}}]' \
   --query 'Listeners[0].ListenerArn' --output text)
 
@@ -56,8 +57,8 @@ LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol
 # TODO: delete this later when CloudFront and $ORIGIN_SECRET are integrated
 aws elbv2 create-listener \
   --load-balancer-arn "$ALB_ARN" \
-  --protocol HTTPS \
-  --port 443 \
+  --protocol HTTP \
+  --port 80 \
   --certificates CertificateArn="$ALB_CERT_ARN" \
   --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
   --default-actions "Type=forward,TargetGroupArn=$TG_ARN"

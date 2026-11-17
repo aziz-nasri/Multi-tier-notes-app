@@ -33,7 +33,7 @@ VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parame
 # Package & upload application code
 echo "Packaging application artifacts..."
 
-# TODO delete the dist folder when cloudfront is integrated 
+# TODO delete the dist folder when cloudfront is integrated
 cd ../app
 tar czf api-latest.tgz app.py requirements.txt notesapp.service dist/
 

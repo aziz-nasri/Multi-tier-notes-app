@@ -42,7 +42,7 @@ echo "Authorizing security group ingress rules..."
 
 # TODO: delete this later when CloudFront and $ORIGIN_SECRET are integrated
 aws ec2 authorize-security-group-ingress --group-id $ALB_SG \
-  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]"
+  --ip-permissions "IpProtocol=tcp,FromPort=80,ToPort=80,IpRanges=[{CidrIp=0.0.0.0/0}]"
 
 aws ec2 authorize-security-group-ingress --group-id $APP_SG \
   --ip-permissions "IpProtocol=tcp,FromPort=3000,ToPort=3000,UserIdGroupPairs=[{GroupId=$ALB_SG}]"
