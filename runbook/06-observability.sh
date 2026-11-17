@@ -19,14 +19,19 @@ ACCOUNT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/account_id" --query
 PROJ=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/proj" --query "Parameter.Value" --output text)
 AWS_REGION=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/region" --query "Parameter.Value" --output text)
 ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_arn" --query "Parameter.Value" --output text)
-ALB_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
+TG_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
 EMAIL=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/email" --query "Parameter.Value" --output text)
+VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parameter.Value" --output text)
+NAT_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/nat_id" --query "Parameter.Value" --output text)
+KMS_KEY_ARN_FOR_CT=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for_cloudtrail" --query "Parameter.Value" --output text)
+KMS_KEY_ARN_FOR_BACKUP=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for_backup" --query "Parameter.Value" --output text)
 
-TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
-aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint $EMAIL
 
 ALB_DIM=$(echo $ALB_ARN | cut -d/ -f2-)
 TG_DIM=$(echo $TG_ARN | cut -d/ -f2-)
+:<<"LOG"
+TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
+aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint $EMAIL
 aws cloudwatch put-metric-alarm \
     --alarm-name notes-alb-5xx \
     --namespace AWS/ApplicationELB \
@@ -118,10 +123,15 @@ aws cloudwatch put-metric-alarm \
 aws logs create-log-group --log-group-name notes-app --region eu-west-1
 
 
+RDS_LOG_GROUP="/aws/rds/instance/notes-db/postgresql"
+aws logs create-log-group \
+    --log-group-name "$RDS_LOG_GROUP" \
+    --region "$AWS_REGION"
+
 aws logs put-retention-policy \
-    --log-group-name /aws/rds/instance/notes-db/postgresql \
+    --log-group-name $RDS_LOG_GROUP \
     --retention-in-days 30 \
-    --region eu-west-1
+    --region "$AWS_REGION"
 
 
 ALB_LOG_GROUP="/aws/elasticloadbalancing/notes-alb"
@@ -137,7 +147,7 @@ aws logs put-retention-policy \
 aws logs put-delivery-source \
     --name notes-alb-source \
     --resource-arn "$ALB_ARN" \
-    --log-type ACCESS_LOGS \
+    --log-type ALB_ACCESS_LOGS \
     --region "$AWS_REGION"
 
 DEST_RESOURCE_ARN="arn:aws:logs:$AWS_REGION:$ACCOUNT_ID:log-group:$ALB_LOG_GROUP"
@@ -155,7 +165,6 @@ aws logs create-delivery \
 
 
 BUCKET_NAME="${PROJ}-${ACCOUNT_ID}-notes-vpc-flow-logs"
-AWS_REGION="eu-west-1"
 aws s3api create-bucket \
     --bucket "$BUCKET_NAME" \
     --region "$AWS_REGION" \
@@ -198,7 +207,10 @@ BUCKET_NAME_FOR_TRAIL="notes-cloudtrail-logs-${ACCOUNT_ID}"
 aws s3api create-bucket \
     --bucket "${BUCKET_NAME_FOR_TRAIL}" \
     --region "${AWS_REGION}" \
-    --create-bucket-configuration LocationConstraint="${AWS_REGION}" \
+    --create-bucket-configuration LocationConstraint="${AWS_REGION}"
+
+aws s3api put-bucket-versioning \
+    --bucket "${BUCKET_NAME_FOR_TRAIL}" \
     --versioning-configuration Status=Enabled
 
 
@@ -250,7 +262,7 @@ aws cloudtrail create-trail \
 aws cloudtrail start-logging --name "$TRAIL_NAME" --region "$AWS_REGION"
 
 
-aws backup create-backup-vault --backup-vault-name notes-vault --encryption-key-arn arn:aws:kms:$AWS_REGION:$ACCOUNT_ID:key/$KMS_KEY_ARN_FOR_BACKUP
+aws backup create-backup-vault --backup-vault-name notes-vault --encryption-key-arn $KMS_KEY_ARN_FOR_BACKUP
 BACKUP_PLAN_ID=$(aws backup create-backup-plan --backup-plan '{
   "BackupPlanName": "notes-daily",
   "Rules": [{
@@ -278,9 +290,9 @@ aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-sel
     --granularity MONTHLY \
     --metrics "UnblendedCost" \
     --filter '{"Tags": {"Key": "Project", "Values": ["notesapp"]}}'
-
-    # cost anomaly detection
-    MONITOR_ARN=$(aws ce create-anomaly-monitor \
+LOG
+# cost anomaly detection
+MONITOR_ARN=$(aws ce create-anomaly-monitor \
     --anomaly-monitor '{
         "MonitorName": "notesapp-cost-monitor",
         "MonitorType": "DIMENSIONAL",
@@ -295,17 +307,38 @@ aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-sel
     --output text \
     --region "$AWS_REGION")
 
-    aws ce create-anomaly-subscription \
-    --anomaly-subscription '{
+
+cat << EOF > subscription.json
+{
+    "AnomalySubscription": {
         "SubscriptionName": "notesapp-cost-alerts",
-        "MonitorArnList": ["'"$MONITOR_ARN"'"],
+        "MonitorArnList": [
+            "${MONITOR_ARN}"
+        ],
         "Subscribers": [
             {
                 "Type": "EMAIL",
-                "Address": "'"$EMAIL"'"
+                "Address": "${EMAIL}"
             }
         ],
         "Frequency": "DAILY",
-        "ThresholdExpression": "{\"Dimensions\": {\"Key\": \"ANOMALY_TOTAL_IMPACT_ABSOLUTE\", \"MatchOptions\": [\"GREATER_THAN_OR_EQUAL\"], \"Values\": [\"50\"]}}"
-    }' \
+        "ThresholdExpression": {
+            "Dimensions": {
+                "Key": "ANOMALY_TOTAL_IMPACT_ABSOLUTE",
+                "MatchOptions": [
+                    "GREATER_THAN_OR_EQUAL"
+                ],
+                "Values": [
+                    "50"
+                ]
+            }
+        }
+    }
+}
+EOF
+
+aws ce create-anomaly-subscription \
+    --cli-input-json file://subscription.json \
     --region "$AWS_REGION"
+
+rm subscription.json

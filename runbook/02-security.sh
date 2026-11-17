@@ -159,16 +159,31 @@ cat << EOF > kms-policy.json
       "Principal": {
         "Service": "cloudtrail.amazonaws.com"
       },
-      "Action": [
-        "kms:GenerateDataKey*",
-        "kms:Decrypt"
-      ],
+      "Action": "kms:GenerateDataKey*",
       "Resource": "*",
       "Condition": {
-        "StringEquals": {
-          "kms:EncryptionContext:aws:cloudtrail:arn": "arn:aws:cloudtrail:*:${ACCOUNT_ID}:trail/*"
+        "StringLike": {
+          "kms:EncryptionContext:aws:cloudtrail:arn": "arn:aws:cloudtrail:eu-west-1:${ACCOUNT_ID}:trail/*"
         }
       }
+    },
+    {
+      "Sid": "Allow CloudTrail to describe key properties",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "kms:DescribeKey",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Allow CloudTrail to decrypt logs",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "cloudtrail.amazonaws.com"
+      },
+      "Action": "kms:Decrypt",
+      "Resource": "*"
     }
   ]
 }
