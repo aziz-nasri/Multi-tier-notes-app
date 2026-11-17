@@ -66,7 +66,6 @@ cat << 'CWEOF' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.js
           {
             "file_path": "/opt/notes/app.log",
             "log_group_name": "/aws/ec2/notes-app",
-            "log_stream_name_prefix": "{instance_id}-",
             "timezone": "UTC"
           }
         ]
