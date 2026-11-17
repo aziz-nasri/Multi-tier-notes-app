@@ -41,27 +41,23 @@ aws elbv2 modify-load-balancer-attributes --load-balancer-arn $ALB_ARN --attribu
 # TODO: Uncomment this later when CloudFront is integrated
 # ORIGIN_SECRET=$(openssl rand -hex 24)
 
-echo "Creating HTTP listener on port 80..."
-# change to HTTPS on port 443 when a domain and certificate are ready.
-LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTP --port 80 \
-  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
-  --default-actions '[{"Type":"fixed-response","FixedResponseConfig":{"StatusCode":"403","ContentType":"text/plain","MessageBody":"Forbidden"}}]' \
-  --query 'Listeners[0].ListenerArn' --output text)
-
-# TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
+# TODO: Uncomment this later when CloudFront is integrated
+# LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTPS --port 443 \
+#  --default-actions '[{"Type":"fixed-response","FixedResponseConfig":{"StatusCode":"403","ContentType":"text/plain","MessageBody":"Forbidden"}}]' \
+#  --query 'Listeners[0].ListenerArn' --output text)
 # echo "Creating listener routing rule with origin verification header..."
 # aws elbv2 create-rule --listener-arn $LISTENER_ARN --priority 10 \
 #   --conditions "[{\"Field\":\"http-header\",\"HttpHeaderConfig\":{\"HttpHeaderName\":\"X-Origin-Verify\",\"Values\":[\"$ORIGIN_SECRET\"]}}]" \
 #   --actions "[{\"Type\":\"forward\",\"TargetGroupArn\":\"$TG_ARN\"}]"
 
-# TODO: delete this later when CloudFront and $ORIGIN_SECRET are integrated
-aws elbv2 create-listener \
+# TODO: Later when you add HTTPS and CloudFront, you can delete this HTTP listener
+echo "Creating HTTP listener on port 80 and forwarding directly to target group..."
+LISTENER_ARN=$(aws elbv2 create-listener \
   --load-balancer-arn "$ALB_ARN" \
   --protocol HTTP \
   --port 80 \
-  --certificates CertificateArn="$ALB_CERT_ARN" \
-  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
-  --default-actions "Type=forward,TargetGroupArn=$TG_ARN"
+  --default-actions "Type=forward,TargetGroupArn=$TG_ARN" \
+  --query 'Listeners[0].ListenerArn' --output text)
 
 # TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
 # echo "Applying S3 bucket policy for CloudFront OAC..."
@@ -74,7 +70,8 @@ aws elbv2 create-listener \
 # rm web-policy.json
 
 echo "Syncing frontend build artifacts to S3 bucket ($WEB_BUCKET)..."
-aws s3 sync ../frontend/dist/ s3://$WEB_BUCKET --delete
+cd ../app
+aws s3 sync dist/ s3://$WEB_BUCKET --delete
 
 # TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
 #echo "Creating CloudFront cache invalidation..."
