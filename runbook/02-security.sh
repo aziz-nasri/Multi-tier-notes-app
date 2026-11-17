@@ -36,10 +36,14 @@ CF_PL=$(aws ec2 describe-managed-prefix-lists \
 CF
 
 echo "Authorizing security group ingress rules..."
+# TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
 #aws ec2 authorize-security-group-ingress --group-id $ALB_SG \
-#  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=$CF_PL}]" for cloudfront
+#  --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=$CF_PL}]"
+
+# TODO: delete this later when CloudFront and $ORIGIN_SECRET are integrated
 aws ec2 authorize-security-group-ingress --group-id $ALB_SG \
   --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges=[{CidrIp=0.0.0.0/0}]"
+
 aws ec2 authorize-security-group-ingress --group-id $APP_SG \
   --ip-permissions "IpProtocol=tcp,FromPort=3000,ToPort=3000,UserIdGroupPairs=[{GroupId=$ALB_SG}]"
 aws ec2 authorize-security-group-ingress --group-id $DB_SG \

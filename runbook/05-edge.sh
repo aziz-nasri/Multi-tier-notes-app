@@ -26,6 +26,7 @@ ALB_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_sg" --query "Parame
 WEB_BUCKET=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/web_bucket" --query "Parameter.Value" --output text)
 TG_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/tg_arn" --query "Parameter.Value" --output text)
 ALB_CERT_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/alb_cert_arn" --query "Parameter.Value" --output text)
+# TODO: Uncomment this later when CloudFront is integrated
 # CLOUDFRONT_DIST_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/cloudfront_dist_id" --query "Parameter.Value" --output text)
 
 echo "Creating Internet-Facing Application Load Balancer..."
@@ -37,7 +38,8 @@ echo "Modifying ALB attributes (drop invalid headers & enable deletion protectio
 aws elbv2 modify-load-balancer-attributes --load-balancer-arn $ALB_ARN --attributes \
   Key=routing.http.drop_invalid_header_fields.enabled,Value=true Key=deletion_protection.enabled,Value=true
 
-ORIGIN_SECRET=$(openssl rand -hex 24)
+# TODO: Uncomment this later when CloudFront is integrated
+# ORIGIN_SECRET=$(openssl rand -hex 24)
 
 echo "Creating HTTPS listener on port 443..."
 LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTPS --port 443 \
@@ -45,22 +47,35 @@ LISTENER_ARN=$(aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol
   --default-actions '[{"Type":"fixed-response","FixedResponseConfig":{"StatusCode":"403","ContentType":"text/plain","MessageBody":"Forbidden"}}]' \
   --query 'Listeners[0].ListenerArn' --output text)
 
-echo "Creating listener routing rule with origin verification header..."
-aws elbv2 create-rule --listener-arn $LISTENER_ARN --priority 10 \
-  --conditions "[{\"Field\":\"http-header\",\"HttpHeaderConfig\":{\"HttpHeaderName\":\"X-Origin-Verify\",\"Values\":[\"$ORIGIN_SECRET\"]}}]" \
-  --actions "[{\"Type\":\"forward\",\"TargetGroupArn\":\"$TG_ARN\"}]"
+# TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
+# echo "Creating listener routing rule with origin verification header..."
+# aws elbv2 create-rule --listener-arn $LISTENER_ARN --priority 10 \
+#   --conditions "[{\"Field\":\"http-header\",\"HttpHeaderConfig\":{\"HttpHeaderName\":\"X-Origin-Verify\",\"Values\":[\"$ORIGIN_SECRET\"]}}]" \
+#   --actions "[{\"Type\":\"forward\",\"TargetGroupArn\":\"$TG_ARN\"}]"
 
-echo "Applying S3 bucket policy for CloudFront OAC..."
-cat > web-policy.json <<EOF
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"cloudfront.amazonaws.com"},
- "Action":"s3:GetObject","Resource":"arn:aws:s3:::$WEB_BUCKET/*",
- "Condition":{"StringEquals":{"AWS:SourceArn":"arn:aws:cloudfront::$ACCOUNT_ID:distribution/$CLOUDFRONT_DIST_ID"}}}]}
-EOF
+# TODO: delete this later when CloudFront and $ORIGIN_SECRET are integrated
+aws elbv2 create-listener \
+  --load-balancer-arn "$ALB_ARN" \
+  --protocol HTTPS \
+  --port 443 \
+  --certificates CertificateArn="$ALB_CERT_ARN" \
+  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
+  --default-actions "Type=forward,TargetGroupArn=$TG_ARN"
+
+# TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
+# echo "Applying S3 bucket policy for CloudFront OAC..."
+# cat > web-policy.json <<EOF
+# {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"cloudfront.amazonaws.com"},
+#  "Action":"s3:GetObject","Resource":"arn:aws:s3:::$WEB_BUCKET/*",
+# "Condition":{"StringEquals":{"AWS:SourceArn":"arn:aws:cloudfront::$ACCOUNT_ID:distribution/$CLOUDFRONT_DIST_ID"}}}]}
+# EOF
 # aws s3api put-bucket-policy --bucket $WEB_BUCKET --policy file://web-policy.json
+# rm web-policy.json
 
 echo "Syncing frontend build artifacts to S3 bucket ($WEB_BUCKET)..."
 aws s3 sync ../frontend/dist/ s3://$WEB_BUCKET --delete
 
+# TODO: Uncomment this later when CloudFront and $ORIGIN_SECRET are integrated
 #echo "Creating CloudFront cache invalidation..."
 # aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DIST_ID" --paths "/*"
 
