@@ -29,7 +29,7 @@ KMS_KEY_ARN_FOR_BACKUP=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for
 
 ALB_DIM=$(echo $ALB_ARN | cut -d/ -f2-)
 TG_DIM=$(echo $TG_ARN | cut -d/ -f2-)
-:<<"LOG"
+
 TOPIC=$(aws sns create-topic --name notes-alerts --query TopicArn --output text)
 aws sns subscribe --topic-arn $TOPIC --protocol email --notification-endpoint $EMAIL
 aws cloudwatch put-metric-alarm \
@@ -290,7 +290,7 @@ aws backup create-backup-selection --backup-plan-id $BACKUP_PLAN_ID --backup-sel
     --granularity MONTHLY \
     --metrics "UnblendedCost" \
     --filter '{"Tags": {"Key": "Project", "Values": ["notesapp"]}}'
-LOG
+
 # cost anomaly detection
 MONITOR_ARN=$(aws ce create-anomaly-monitor \
     --anomaly-monitor '{
