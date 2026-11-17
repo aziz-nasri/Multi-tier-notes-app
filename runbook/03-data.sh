@@ -23,6 +23,7 @@ DATA_A=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/data_a" --query "Parame
 DATA_B=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/data_b" --query "Parameter.Value" --output text)
 DB_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_sg" --query "Parameter.Value" --output text)
 KMS_KEY_FOR_ARTI=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for_arti" --query "Parameter.Value" --output text)
+DB_NAME=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_name" --query "Parameter.Value" --output text)
 
 
 # Buckets
@@ -57,7 +58,7 @@ aws rds create-db-instance --db-instance-identifier notes-db \
   --engine postgres --engine-version $PG_VER --db-instance-class db.t4g.micro \
   --allocated-storage 20 --storage-type gp3 --storage-encrypted --kms-key-id $KMS_KEY_FOR_ARTI \
   --master-username notesadmin --manage-master-user-password --master-user-secret-kms-key-id $KMS_KEY_FOR_ARTI \
-  --db-name notes --db-subnet-group-name notes-db-subnets --vpc-security-group-ids $DB_SG \
+  --db-name $DB_NAME --db-subnet-group-name notes-db-subnets --vpc-security-group-ids $DB_SG \
   --no-publicly-accessible --no-multi-az --backup-retention-period 1 \
   --preferred-backup-window 02:00-03:00 --preferred-maintenance-window sun:03:30-sun:04:30 \
   --enable-cloudwatch-logs-exports postgresql --deletion-protection --copy-tags-to-snapshot \

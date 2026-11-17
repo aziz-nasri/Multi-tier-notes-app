@@ -1,7 +1,7 @@
 import os
 import json
 import boto3
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import ThreadedConnectionPool
@@ -26,6 +26,11 @@ db_pool = ThreadedConnectionPool(
 
 # 3. Initialize Flask application
 app = Flask(__name__)
+
+# TODO : delete when Cloudfront is integrated.
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
 
 @app.route('/api/health', methods=['GET'])
 def health():

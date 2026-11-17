@@ -24,6 +24,7 @@ APP_A=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_a" --query "Paramete
 APP_B=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_b" --query "Parameter.Value" --output text)
 APP_SG=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/app_sg" --query "Parameter.Value" --output text)
 DB_HOST=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_host" --query "Parameter.Value" --output text)
+DB_NAME=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_name" --query "Parameter.Value" --output text)
 DB_SECRET_ARN=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/db_secret_arn" --with-decryption --query "Parameter.Value" --output text)
 ART_BUCKET=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/art_bucket" --query "Parameter.Value" --output text)
 KMS_KEY_FOR_ARTI=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/key_for_arti" --query "Parameter.Value" --output text)
@@ -31,8 +32,10 @@ VPC_ID=$(aws ssm get-parameter --name "${PROJECT_PREFIX}/vpc_id" --query "Parame
 
 # Package & upload application code
 echo "Packaging application artifacts..."
+
+# TODO delete the dist folder when cloudfront is integrated 
 cd ../app
-tar czf api-latest.tgz app.py requirements.txt notesapp.service
+tar czf api-latest.tgz app.py requirements.txt notesapp.service dist/
 
 echo "Uploading package to S3..."
 aws s3 cp api-latest.tgz s3://$ART_BUCKET/api-latest.tgz --sse aws:kms --sse-kms-key-id $KMS_KEY_FOR_ARTI
@@ -88,6 +91,7 @@ python3 -m venv venv
 cat << ENV > /opt/notes/.env
 AWS_REGION=$AWS_REGION
 DB_HOST=$DB_HOST
+DB_NAME=$DB_NAME
 DB_SECRET_ARN=$DB_SECRET_ARN
 PORT=3000
 ENV

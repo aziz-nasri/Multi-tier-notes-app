@@ -24,6 +24,8 @@ save_to_ssm "region" "eu-west-1"
 save_to_ssm "proj" "notesapp"
 save_to_ssm "account_id" "$ACCOUNT_ID"
 save_to_ssm "email" "aziz.nasri.dev@gmail.com"
+save_to_ssm "db_name" "notes"
+# TODO uncomment when domain is ready
 # save_to_ssm "domain" ""
 
 echo "All infrastructure outputs successfully stored in SSM Parameter Store!"
