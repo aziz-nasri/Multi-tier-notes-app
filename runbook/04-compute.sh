@@ -47,12 +47,27 @@ cat > userdata.sh <<EOF
 set -euxo pipefail
 
 dnf install -y python3 python3-pip amazon-cloudwatch-agent
-useradd -r -m notes
-mkdir -p /opt/notes
+
+# Create notes system user if it doesn't exist
+if ! id "notes" &>/dev/null; then
+    useradd -r -m notes
+fi
+
+mkdir -p /opt/notes/templates
+mkdir -p /opt/notes/static
 cd /opt/notes
 
-aws s3 cp s3://$ART_BUCKET/api-latest.tgz . 
+# Download and extract code from S3
+aws s3 cp s3://notesapp-103415318188-artifacts/api-latest.tgz .
 tar xzf api-latest.tgz
+
+if [ -d "dist" ]; then
+    cp -a dist/index.html templates/
+    cp -a dist/style.css static/
+    cp -a dist/app.js static/
+fi
+
+# Download RDS certificate bundle
 curl -sfo rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
 # Configure CloudWatch Agent
@@ -76,10 +91,10 @@ cat << 'CWEOF' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.js
 CWEOF
 
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-    -a fetch-config \
-    -m ec2 \
-    -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
-    -s
+  -a fetch-config \
+  -m ec2 \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json \
+  -s
 
 # Setup Python virtual environment
 python3 -m venv venv
@@ -88,15 +103,21 @@ python3 -m venv venv
 
 # Generate .env file
 cat << ENV > /opt/notes/.env
-AWS_REGION=$AWS_REGION
-DB_HOST=$DB_HOST
-DB_NAME=$DB_NAME
-DB_SECRET_ARN=$DB_SECRET_ARN
+AWS_REGION=eu-west-1
+DB_HOST=notes-db.crem8qmq488o.eu-west-1.rds.amazonaws.com
+DB_NAME=notes
+DB_SECRET_ARN=arn:aws:secretsmanager:eu-west-1:103415318188:secret:rds!db-64eafc46-bac7-4808-b701-963070b1ae02-84j7t0
 PORT=3000
 ENV
 
+# Set correct permissions so the 'notes' user owns everything
+chown -R notes:notes /opt/notes
+
 # Install and configure systemd service
-mv /opt/notes/notesapp.service /etc/systemd/system/notes.service
+if [ -f "/opt/notes/notesapp.service" ]; then
+    mv /opt/notes/notesapp.service /etc/systemd/system/notes.service
+fi
+
 systemctl daemon-reload
 systemctl enable --now notes
 EOF
