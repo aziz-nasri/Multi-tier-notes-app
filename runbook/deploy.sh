@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+export AWS_PAGER=""
+
 echo "=================================================="
 echo "Starting Full AWS Infrastructure Deployment..."
 echo "=================================================="
@@ -26,7 +28,11 @@ run_script() {
 }
 
 # 1. Environment & Base Variables
-run_script "env.sh" "Loading environment configuration"
+echo ""
+echo "--------------------------------------------------"
+echo "--> [STEP] Loading environment configuration env.sh"
+echo "--------------------------------------------------"
+source ./env.sh
 
 # 2. Network Infrastructure
 run_script "01-network.sh" "Provisioning Network Tier"
@@ -44,7 +50,7 @@ run_script "04-compute.sh" "Deploying Compute Infrastructure"
 run_script "05-edge.sh" "Configuring Edge & Routing"
 
 # 7. Observability Tier
-run_script "06-obervability.sh" "Setting up Observability & Logging"
+run_script "06-observability.sh" "Setting up Observability & Logging"
 
 echo ""
 echo "=================================================="
