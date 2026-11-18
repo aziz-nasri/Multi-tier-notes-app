@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloud Notes</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <div class="header-title">
+        <h1>Notes</h1>
+        <span id="api-status" class="status-badge checking" title="Backend API Status">Checking API...</span>
+      </div>
+      <button id="new-note-btn" class="btn primary">+ New Note</button>
+    </header>
+
+    <main class="workspace">
+      <!-- Left Sidebar: Notes List -->
+      <aside class="sidebar">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="Filter notes..." />
+        </div>
+        <ul id="notes-list" class="notes-list">
+          <!-- Populated dynamically via JS -->
+        </ul>
+      </aside>
+
+      <!-- Right Panel: Note Editor -->
+      <section class="editor-panel">
+        <form id="note-form">
+          <input type="hidden" id="note-id" />
+          <div class="editor-header">
+            <input 
+              type="text" 
+              id="note-title" 
+              placeholder="Note Title..." 
+              required 
+              autocomplete="off"
+            />
+            <div class="editor-actions">
+              <button type="button" id="delete-btn" class="btn danger hidden">Delete</button>
+              <button type="submit" id="save-btn" class="btn primary">Save Note</button>
+            </div>
+          </div>
+          <div id="note-meta" class="note-meta"></div>
+          <textarea 
+            id="note-body" 
+            placeholder="Write your note here..." 
+            required
+          ></textarea>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
