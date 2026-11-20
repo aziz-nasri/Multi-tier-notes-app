@@ -85,14 +85,21 @@ def update_note(note_id):
     finally:
         db_pool.putconn(conn)
 
-@app.route('/api/notes/<int:note_id>', methods=['DELETE'])
+@app.route('/api/notes/<uuid:note_id>', methods=['DELETE'])
 def delete_note(note_id):
+    note_id_str = str(note_id)
     conn = db_pool.getconn()
     try:
         with conn.cursor() as cursor:
-            cursor.execute('DELETE FROM notes WHERE id=%s', (note_id,))
+            cursor.execute('DELETE FROM notes WHERE id=%s', (note_id_str,))
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({'error': 'Note not found'}), 404
             conn.commit()
             return '', 204
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         db_pool.putconn(conn)
 
