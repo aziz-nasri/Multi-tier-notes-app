@@ -11,10 +11,13 @@ EnvironmentFile=/opt/notes/.env
 ExecStart=/opt/notes/venv/bin/python app.py
 Restart=always
 RestartSec=5
+StandardOutput=append:/opt/notes/app.log
+StandardError=append:/opt/notes/app.log
 
 # Security hardening
 PrivateTmp=true
 ProtectSystem=full
+ReadWritePaths=/opt/notes
 NoNewPrivileges=true
 
 [Install]
