@@ -66,33 +66,47 @@ def create_note():
     finally:
         db_pool.putconn(conn)
 
-@app.route('/api/notes/<int:note_id>', methods=['PUT'])
+@app.route('/api/notes/<uuid:note_id>', methods=['PUT'])
 def update_note(note_id):
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     title = data.get('title')
     body = data.get('body')
-    
+    note_id_str = str(note_id)
+
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
                 'UPDATE notes SET title=%s, body=%s, updated_at=now() WHERE id=%s RETURNING *',
-                (title, body, note_id)
+                (title, body, note_id_str)
             )
             note = cursor.fetchone()
+            if note is None:
+                conn.rollback()
+                return jsonify({'error': 'Note not found'}), 404
             conn.commit()
             return jsonify(note), 200
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         db_pool.putconn(conn)
 
-@app.route('/api/notes/<int:note_id>', methods=['DELETE'])
+@app.route('/api/notes/<uuid:note_id>', methods=['DELETE'])
 def delete_note(note_id):
+    note_id_str = str(note_id)
     conn = db_pool.getconn()
     try:
         with conn.cursor() as cursor:
-            cursor.execute('DELETE FROM notes WHERE id=%s', (note_id,))
+            cursor.execute('DELETE FROM notes WHERE id=%s', (note_id_str,))
+            if cursor.rowcount == 0:
+                conn.rollback()
+                return jsonify({'error': 'Note not found'}), 404
             conn.commit()
             return '', 204
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         db_pool.putconn(conn)
 

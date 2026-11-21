@@ -50,7 +50,7 @@ for s in $PUB_A $PUB_B; do aws ec2 associate-route-table --route-table-id $PUB_R
 # NAT + app route table
 echo "Allocating Elastic IP and creating NAT Gateway (this may take a moment)..."
 EIP=$(aws ec2 allocate-address --domain vpc --query AllocationId --output text)
-NAT_ID=$(aws ec2 create-nat-gateway --subnet-id $PUB_A --allocation-id $EIP --query NatGateway.NatGatewayId --output text)
+NAT_ID=$(aws ec2 create-nat-gateway --subnet-id $PUB_A --allocation-id $EIP --tag-specifications "ResourceType=natgateway,Tags=[{Key=Name,Value=$PROJ-nat},{Key=Project,Value=$PROJ}]" --query NatGateway.NatGatewayId --output text)
 aws ec2 wait nat-gateway-available --nat-gateway-ids $NAT_ID
 APP_RT=$(aws ec2 create-route-table --vpc-id $VPC_ID --query RouteTable.RouteTableId --output text)
 aws ec2 create-route --route-table-id $APP_RT --destination-cidr-block 0.0.0.0/0 --nat-gateway-id $NAT_ID
