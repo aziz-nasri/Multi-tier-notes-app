@@ -50,7 +50,7 @@ A note-taking web app deployed across two Availability Zones with CloudFront, an
 1. The browser resolves `[notes.yourdomain.com]` (Route 53) to CloudFront over TLS 1.2+.
 2. Static assets are served from a **private** S3 bucket through Origin Access Control.
 3. `/api/*` is forwarded to the ALB over HTTPS with a secret header. The ALB returns **403** to anything without it, and its security group accepts only CloudFront's managed prefix list.
-4. Instances in private subnets run the Node.js API, fetch DB credentials from Secrets Manager, and connect to RDS over verified TLS.
+4. Instances in private subnets run the Flask API, fetch DB credentials from Secrets Manager, and connect to RDS over verified TLS.
 5. The data tier has **no internet route**.
 
 ## Tech stack
